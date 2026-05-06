@@ -56,6 +56,7 @@ public struct OllamaClient: Sendable {
     ///   - prompt: The user prompt.
     ///   - systemPrompt: The system prompt.
     ///   - temperature: Sampling temperature (default 0.3).
+    ///   - think: Optional native Ollama thinking control. Use `false` to disable thinking.
     ///   - timeout: Request timeout in seconds (default 30).
     /// - Returns: The generated response text.
     public static func generate(
@@ -64,6 +65,7 @@ public struct OllamaClient: Sendable {
         prompt: String,
         systemPrompt: String,
         temperature: Double = 0.3,
+        think: Bool? = nil,
         timeout: TimeInterval = 30
     ) async throws -> String {
         let url = baseURL.appendingPathComponent("api/generate")
@@ -72,13 +74,16 @@ public struct OllamaClient: Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "prompt": prompt,
             "system": systemPrompt,
             "temperature": temperature,
             "stream": false
         ]
+        if let think {
+            body["think"] = think
+        }
 
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
             throw LLMKitError.encodingError
