@@ -28,8 +28,11 @@ func performRequest(
             try await Task.sleep(nanoseconds: delay)
         }
 
+        let session = makeEphemeralURLSession(timeout: timeout)
+        defer { session.finishTasksAndInvalidate() }
+
         do {
-            let (data, response) = try await URLSession.shared.data(for: req)
+            let (data, response) = try await session.data(for: req)
             if let http = response as? HTTPURLResponse,
                retryableStatusCodes.contains(http.statusCode),
                attempt < maxRetries {
@@ -72,8 +75,11 @@ func performUpload(
             try await Task.sleep(nanoseconds: delay)
         }
 
+        let session = makeEphemeralURLSession(timeout: timeout)
+        defer { session.finishTasksAndInvalidate() }
+
         do {
-            let (data, response) = try await URLSession.shared.upload(for: req, from: bodyData)
+            let (data, response) = try await session.upload(for: req, from: bodyData)
             if let http = response as? HTTPURLResponse,
                retryableStatusCodes.contains(http.statusCode),
                attempt < maxRetries {
@@ -95,4 +101,13 @@ func performUpload(
     }
 
     throw lastError ?? LLMKitError.networkError("Request failed after \(maxRetries + 1) attempts")
+}
+
+private func makeEphemeralURLSession(timeout: TimeInterval) -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.timeoutIntervalForRequest = timeout
+    configuration.timeoutIntervalForResource = timeout
+    configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+    configuration.urlCache = nil
+    return URLSession(configuration: configuration)
 }
