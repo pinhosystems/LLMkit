@@ -29,11 +29,18 @@ public struct SonioxClient: Sendable {
         language: String? = nil,
         customVocabulary: [String] = [],
         maxWaitSeconds: TimeInterval = 300,
-        timeout: TimeInterval = 30
+        timeout: TimeInterval = 30,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
-        let fileId = try await uploadFile(audioData: audioData, fileName: fileName, apiKey: apiKey, timeout: timeout)
+        let fileId = try await uploadFile(
+            audioData: audioData,
+            fileName: fileName,
+            apiKey: apiKey,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
         let transcriptionId = try await createTranscription(
             fileId: fileId,
             apiKey: apiKey,
@@ -86,7 +93,13 @@ public struct SonioxClient: Sendable {
 
     // MARK: - Private Steps
 
-    private static func uploadFile(audioData: Data, fileName: String, apiKey: String, timeout: TimeInterval) async throws -> String {
+    private static func uploadFile(
+        audioData: Data,
+        fileName: String,
+        apiKey: String,
+        timeout: TimeInterval,
+        resourceTimeout: TimeInterval? = nil
+    ) async throws -> String {
         guard let url = URL(string: "\(apiBase)/files") else {
             throw LLMKitError.invalidURL("\(apiBase)/files")
         }
@@ -99,7 +112,12 @@ public struct SonioxClient: Sendable {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await performUpload(request, data: form.data, timeout: timeout)
+        let (data, response) = try await performUpload(
+            request,
+            data: form.data,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
         try validateHTTPResponse(response, data: data)
 
         let decoded = try decodeJSON(FileUploadResponse.self, from: data)

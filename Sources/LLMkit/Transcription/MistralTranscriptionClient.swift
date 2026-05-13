@@ -20,7 +20,8 @@ public struct MistralTranscriptionClient: Sendable {
         fileName: String = "audio.wav",
         apiKey: String,
         model: String,
-        timeout: TimeInterval = 30
+        timeout: TimeInterval = 30,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
@@ -38,7 +39,12 @@ public struct MistralTranscriptionClient: Sendable {
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
 
-        let (data, response) = try await performUpload(request, data: form.data, timeout: timeout)
+        let (data, response) = try await performUpload(
+            request,
+            data: form.data,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
 
         try validateHTTPResponse(response, data: data)
 

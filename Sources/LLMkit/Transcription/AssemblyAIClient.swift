@@ -15,11 +15,17 @@ public struct AssemblyAIClient: Sendable {
         prompt: String? = nil,
         customVocabulary: [String] = [],
         maxWaitSeconds: TimeInterval = 300,
-        timeout: TimeInterval = 30
+        timeout: TimeInterval = 30,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
-        let uploadURL = try await uploadAudio(audioData: audioData, apiKey: apiKey, timeout: timeout)
+        let uploadURL = try await uploadAudio(
+            audioData: audioData,
+            apiKey: apiKey,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
         let transcriptId = try await createTranscript(
             audioURL: uploadURL,
             apiKey: apiKey,
@@ -73,7 +79,12 @@ public struct AssemblyAIClient: Sendable {
 
     // MARK: - Private
 
-    private static func uploadAudio(audioData: Data, apiKey: String, timeout: TimeInterval) async throws -> String {
+    private static func uploadAudio(
+        audioData: Data,
+        apiKey: String,
+        timeout: TimeInterval,
+        resourceTimeout: TimeInterval? = nil
+    ) async throws -> String {
         guard let url = URL(string: "\(apiBase)/v2/upload") else {
             throw LLMKitError.invalidURL("\(apiBase)/v2/upload")
         }
@@ -83,7 +94,12 @@ public struct AssemblyAIClient: Sendable {
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await performUpload(request, data: audioData, timeout: timeout)
+        let (data, response) = try await performUpload(
+            request,
+            data: audioData,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
         try validateHTTPResponse(response, data: data)
 
         let decoded = try decodeJSON(AssemblyAIUploadResponse.self, from: data)

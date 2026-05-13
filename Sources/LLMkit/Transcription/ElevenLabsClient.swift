@@ -21,7 +21,8 @@ public struct ElevenLabsClient: Sendable {
         apiKey: String,
         model: String,
         language: String? = nil,
-        timeout: TimeInterval = 30
+        timeout: TimeInterval = 30,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
@@ -44,7 +45,12 @@ public struct ElevenLabsClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
 
-        let (data, response) = try await performUpload(request, data: form.data, timeout: timeout)
+        let (data, response) = try await performUpload(
+            request,
+            data: form.data,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
 
         try validateHTTPResponse(response, data: data)
 

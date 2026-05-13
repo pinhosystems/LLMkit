@@ -21,7 +21,8 @@ public struct XAIClient: Sendable {
         apiKey: String,
         language: String? = nil,
         format: Bool = false,
-        timeout: TimeInterval = 60
+        timeout: TimeInterval = 60,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
@@ -45,7 +46,12 @@ public struct XAIClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await performUpload(request, data: form.data, timeout: timeout)
+        let (data, response) = try await performUpload(
+            request,
+            data: form.data,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
 
         try validateHTTPResponse(response, data: data)
 

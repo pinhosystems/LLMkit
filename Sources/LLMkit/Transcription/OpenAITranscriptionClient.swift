@@ -17,7 +17,9 @@ public struct OpenAITranscriptionClient: Sendable {
     ///   - model: Model name (e.g. `"whisper-large-v3-turbo"`).
     ///   - language: Optional language code. Pass `nil` for auto-detect.
     ///   - prompt: Optional transcription prompt/hint.
-    ///   - timeout: Request timeout in seconds (default 60).
+    ///   - timeout: Idle/per-packet timeout (default 60). Covers stalled uploads.
+    ///   - resourceTimeout: Total operation budget covering server processing time.
+    ///     Pass a larger value for multi-minute audio. Defaults to `timeout`.
     /// - Returns: The transcribed text.
     public static func transcribe(
         baseURL: URL,
@@ -27,7 +29,8 @@ public struct OpenAITranscriptionClient: Sendable {
         model: String,
         language: String? = nil,
         prompt: String? = nil,
-        timeout: TimeInterval = 60
+        timeout: TimeInterval = 60,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
@@ -54,19 +57,28 @@ public struct OpenAITranscriptionClient: Sendable {
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await performUpload(request, data: form.data, timeout: timeout)
+        let (data, response) = try await performUpload(
+            request,
+            data: form.data,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
 
         try validateHTTPResponse(response, data: data)
 
-        // Try structured JSON decode first, fall back to raw string
-        if let decoded = try? JSONDecoder().decode(OpenAITranscriptionResponse.self, from: data),
-           let text = decoded.text {
-            return text
+        // Strict decode. A previous "fall back to raw string" path silently returned
+        // truncated/HTML payloads as transcription text on timeout — never again.
+        do {
+            let decoded = try JSONDecoder().decode(OpenAITranscriptionResponse.self, from: data)
+            if let text = decoded.text, !text.isEmpty {
+                return text
+            }
+            throw LLMKitError.noResultReturned
+        } catch let error as LLMKitError {
+            throw error
+        } catch {
+            throw LLMKitError.decodingError(error.localizedDescription)
         }
-        if let text = String(data: data, encoding: .utf8), !text.isEmpty {
-            return text
-        }
-        throw LLMKitError.noResultReturned
     }
 
     /// Verifies that an API key is valid against an OpenAI-compatible provider.

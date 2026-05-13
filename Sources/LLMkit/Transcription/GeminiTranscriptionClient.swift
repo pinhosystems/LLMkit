@@ -19,7 +19,8 @@ public struct GeminiTranscriptionClient: Sendable {
         apiKey: String,
         model: String,
         mimeType: String = "audio/wav",
-        timeout: TimeInterval = 60
+        timeout: TimeInterval = 60,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
@@ -50,7 +51,11 @@ public struct GeminiTranscriptionClient: Sendable {
             throw LLMKitError.encodingError
         }
 
-        let (data, response) = try await performRequest(request, timeout: timeout)
+        let (data, response) = try await performRequest(
+            request,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
         try validateHTTPResponse(response, data: data)
 
         let decoded = try decodeJSON(GeminiResponse.self, from: data)
