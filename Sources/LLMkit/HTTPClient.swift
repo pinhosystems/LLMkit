@@ -13,11 +13,21 @@ func validateAPIKey(_ apiKey: String) throws {
 /// Performs an HTTP request with automatic retry for transient failures.
 ///
 /// Retries on network errors and HTTP 429/5xx responses with exponential backoff (1s, 2s).
+///
+/// - Parameters:
+///   - request: The request to perform.
+///   - timeout: Idle/per-packet timeout (`timeoutIntervalForRequest`). Default 30s.
+///   - resourceTimeout: Total operation budget (`timeoutIntervalForResource`).
+///     Default `nil` mirrors `timeout` for backward compatibility. Pass a larger value
+///     when the server may legitimately take longer than `timeout` to produce a full response
+///     (e.g. cloud transcription of multi-minute audio).
 func performRequest(
     _ request: URLRequest,
     timeout: TimeInterval = 30,
+    resourceTimeout: TimeInterval? = nil,
     maxRetries: Int = 2
 ) async throws -> (Data, URLResponse) {
+    let resource = resourceTimeout ?? timeout
     var req = request
     req.timeoutInterval = timeout
     var lastError: (any Error)?
@@ -28,7 +38,7 @@ func performRequest(
             try await Task.sleep(nanoseconds: delay)
         }
 
-        let session = makeEphemeralURLSession(timeout: timeout)
+        let session = makeEphemeralURLSession(requestTimeout: timeout, resourceTimeout: resource)
         defer { session.finishTasksAndInvalidate() }
 
         do {
@@ -59,12 +69,22 @@ func performRequest(
 /// Performs an HTTP upload with automatic retry for transient failures.
 ///
 /// Retries on network errors and HTTP 429/5xx responses with exponential backoff (1s, 2s).
+///
+/// - Parameters:
+///   - request: The request to perform.
+///   - bodyData: Multipart or raw body to upload.
+///   - timeout: Idle/per-packet timeout (`timeoutIntervalForRequest`). Default 30s.
+///   - resourceTimeout: Total operation budget (`timeoutIntervalForResource`).
+///     Default `nil` mirrors `timeout`. Pass a larger value for long-running uploads
+///     where the server processes the payload before responding.
 func performUpload(
     _ request: URLRequest,
     data bodyData: Data,
     timeout: TimeInterval = 30,
+    resourceTimeout: TimeInterval? = nil,
     maxRetries: Int = 2
 ) async throws -> (Data, URLResponse) {
+    let resource = resourceTimeout ?? timeout
     var req = request
     req.timeoutInterval = timeout
     var lastError: (any Error)?
@@ -75,7 +95,7 @@ func performUpload(
             try await Task.sleep(nanoseconds: delay)
         }
 
-        let session = makeEphemeralURLSession(timeout: timeout)
+        let session = makeEphemeralURLSession(requestTimeout: timeout, resourceTimeout: resource)
         defer { session.finishTasksAndInvalidate() }
 
         do {
@@ -103,10 +123,10 @@ func performUpload(
     throw lastError ?? LLMKitError.networkError("Request failed after \(maxRetries + 1) attempts")
 }
 
-private func makeEphemeralURLSession(timeout: TimeInterval) -> URLSession {
+private func makeEphemeralURLSession(requestTimeout: TimeInterval, resourceTimeout: TimeInterval) -> URLSession {
     let configuration = URLSessionConfiguration.ephemeral
-    configuration.timeoutIntervalForRequest = timeout
-    configuration.timeoutIntervalForResource = timeout
+    configuration.timeoutIntervalForRequest = requestTimeout
+    configuration.timeoutIntervalForResource = max(resourceTimeout, requestTimeout)
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
     configuration.urlCache = nil
     return URLSession(configuration: configuration)

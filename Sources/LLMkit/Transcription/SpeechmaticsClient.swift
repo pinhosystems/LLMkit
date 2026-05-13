@@ -27,7 +27,8 @@ public struct SpeechmaticsClient: Sendable {
         operatingPoint: String = "enhanced",
         customVocabulary: [String] = [],
         maxWaitSeconds: TimeInterval = 300,
-        timeout: TimeInterval = 30
+        timeout: TimeInterval = 30,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
@@ -38,7 +39,8 @@ public struct SpeechmaticsClient: Sendable {
             language: language,
             operatingPoint: operatingPoint,
             customVocabulary: customVocabulary,
-            timeout: timeout
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
         )
         try await pollJobStatus(id: jobId, apiKey: apiKey, maxWaitSeconds: maxWaitSeconds, timeout: timeout)
         let transcript = try await fetchTranscript(id: jobId, apiKey: apiKey, timeout: timeout)
@@ -90,7 +92,8 @@ public struct SpeechmaticsClient: Sendable {
         language: String?,
         operatingPoint: String,
         customVocabulary: [String],
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         guard let url = URL(string: "\(apiBase)/jobs") else {
             throw LLMKitError.invalidURL("\(apiBase)/jobs")
@@ -126,7 +129,12 @@ public struct SpeechmaticsClient: Sendable {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await performUpload(request, data: form.data, timeout: timeout)
+        let (data, response) = try await performUpload(
+            request,
+            data: form.data,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
         try validateHTTPResponse(response, data: data)
 
         let decoded = try decodeJSON(JobSubmitResponse.self, from: data)

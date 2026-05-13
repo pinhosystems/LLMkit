@@ -28,7 +28,8 @@ public struct DeepgramClient: Sendable {
         punctuate: Bool = true,
         paragraphs: Bool = true,
         customVocabulary: [String] = [],
-        timeout: TimeInterval = 30
+        timeout: TimeInterval = 30,
+        resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
         try validateAPIKey(apiKey)
 
@@ -59,7 +60,12 @@ public struct DeepgramClient: Sendable {
         request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await performUpload(request, data: audioData, timeout: timeout)
+        let (data, response) = try await performUpload(
+            request,
+            data: audioData,
+            timeout: timeout,
+            resourceTimeout: resourceTimeout
+        )
 
         try validateHTTPResponse(response, data: data)
 
