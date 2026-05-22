@@ -18,6 +18,15 @@ public struct XAIClient: Sendable {
     ///     truncation — this client forwards whatever is passed in. Each entry
     ///     is sent as a repeated `keyterm` multipart field, which is how the
     ///     xAI API consumes lists.
+    ///   - fillerWords: When `true`, the recognizer keeps filler words ("uh",
+    ///     "um", etc.) in the transcript. When `false` (the xAI default), they
+    ///     are stripped. Pass `nil` to omit the field and accept the server
+    ///     default.
+    ///   - diarize: When `true`, the transcript includes speaker labels. Pass
+    ///     `nil` to omit and accept the server default.
+    ///   - multichannel: When `true`, multi-channel audio is transcribed
+    ///     per-channel rather than down-mixed. Pass `nil` to omit and accept
+    ///     the server default.
     ///   - timeout: Request timeout in seconds (default 60).
     /// - Returns: The transcribed text.
     public static func transcribe(
@@ -27,6 +36,9 @@ public struct XAIClient: Sendable {
         language: String? = nil,
         format: Bool = false,
         keyterm: [String]? = nil,
+        fillerWords: Bool? = nil,
+        diarize: Bool? = nil,
+        multichannel: Bool? = nil,
         timeout: TimeInterval = 60,
         resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
@@ -49,6 +61,16 @@ public struct XAIClient: Sendable {
                 guard !trimmed.isEmpty else { continue }
                 form.addField(name: "keyterm", value: trimmed)
             }
+        }
+
+        if let fillerWords {
+            form.addField(name: "filler_words", value: fillerWords ? "true" : "false")
+        }
+        if let diarize {
+            form.addField(name: "diarize", value: diarize ? "true" : "false")
+        }
+        if let multichannel {
+            form.addField(name: "multichannel", value: multichannel ? "true" : "false")
         }
 
         // Per xAI docs, the `file` field must be the last field in the multipart body.

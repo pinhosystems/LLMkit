@@ -15,6 +15,12 @@ public final class XAIStreamingClient: StreamingTranscriptionProvider, @unchecke
     /// Cleared when `speech_final=true` or `transcript.done` fires.
     private var lockedUtteranceBuffer = ""
 
+    /// Default silence (ms) the server should wait before declaring an
+    /// utterance final. The xAI server default is 10ms which chops sentences
+    /// at micro-pauses; 1500ms accommodates natural thinking pauses while
+    /// keeping interactive latency low.
+    public static let defaultEndpointingMs = 1500
+
     public private(set) var transcriptionEvents: AsyncStream<StreamingTranscriptionEvent>
 
     public init() {
@@ -30,22 +36,78 @@ public final class XAIStreamingClient: StreamingTranscriptionProvider, @unchecke
         eventsContinuation?.finish()
     }
 
-    /// Connects to the xAI streaming endpoint.
+    /// Protocol-conforming `connect`. Delegates to the extended method using
+    /// the default endpointing and server defaults for `filler_words` /
+    /// `diarize`. Callers wanting to tune those should use the extended
+    /// overload below.
+    public func connect(apiKey: String, model: String, language: String?, customVocabulary: [String]) async throws {
+        try await connect(
+            apiKey: apiKey,
+            model: model,
+            language: language,
+            customVocabulary: customVocabulary,
+            endpointingMs: Self.defaultEndpointingMs,
+            fillerWords: nil,
+            diarize: nil
+        )
+    }
+
+    /// Extended connect with all xAI-specific tuning knobs exposed.
     ///
     /// The `model` parameter is accepted for protocol conformance but currently ignored —
     /// the xAI STT endpoint does not expose per-model selection.
-    public func connect(apiKey: String, model: String, language: String?, customVocabulary: [String] = []) async throws {
+    ///
+    /// - Parameters:
+    ///   - apiKey: xAI API key.
+    ///   - model: Accepted for protocol conformance; xAI ignores it.
+    ///   - language: BCP-47 language code, or `nil`/`"auto"` for auto-detect.
+    ///   - customVocabulary: Optional bias terms. Sent as repeated `keyterm`
+    ///     query params. Empty or whitespace-only entries are dropped. Callers
+    ///     are responsible for the xAI documented caps (100 entries / 50
+    ///     chars each).
+    ///   - endpointingMs: Silence (in ms) before the server fires an
+    ///     utterance-final event. Range 0-5000. Pass `nil` to accept the
+    ///     server default (10ms). Clamped to the supported range.
+    ///   - fillerWords: When `true`, server keeps filler words. Pass `nil` to
+    ///     accept the server default.
+    ///   - diarize: When `true`, transcripts include speaker labels. Pass
+    ///     `nil` to accept the server default.
+    public func connect(
+        apiKey: String,
+        model: String,
+        language: String?,
+        customVocabulary: [String],
+        endpointingMs: Int?,
+        fillerWords: Bool?,
+        diarize: Bool?
+    ) async throws {
         var components = URLComponents(string: "wss://api.x.ai/v1/stt")!
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "sample_rate", value: "16000"),
             URLQueryItem(name: "encoding", value: "pcm"),
             URLQueryItem(name: "interim_results", value: "true"),
-            // Default is 10ms which chops sentences at micro-pauses. 800ms feels natural for dictation.
-            URLQueryItem(name: "endpointing", value: "800"),
         ]
+
+        if let endpointingMs {
+            let clamped = max(0, min(5000, endpointingMs))
+            queryItems.append(URLQueryItem(name: "endpointing", value: String(clamped)))
+        }
 
         if let language, language != "auto", !language.isEmpty {
             queryItems.append(URLQueryItem(name: "language", value: language))
+        }
+
+        for term in customVocabulary {
+            let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            queryItems.append(URLQueryItem(name: "keyterm", value: trimmed))
+        }
+
+        if let fillerWords {
+            queryItems.append(URLQueryItem(name: "filler_words", value: fillerWords ? "true" : "false"))
+        }
+        if let diarize {
+            queryItems.append(URLQueryItem(name: "diarize", value: diarize ? "true" : "false"))
         }
 
         components.queryItems = queryItems
