@@ -13,6 +13,11 @@ public struct XAIClient: Sendable {
     ///   - apiKey: xAI API key.
     ///   - language: Optional BCP-47 language code. Pass `nil` for auto-detect.
     ///   - format: Whether to apply text formatting (Inverse Text Normalization). Requires `language`.
+    ///   - keyterm: Bias terms for the recognizer. xAI documents a max of 100
+    ///     entries, each up to 50 characters. Callers are responsible for
+    ///     truncation — this client forwards whatever is passed in. Each entry
+    ///     is sent as a repeated `keyterm` multipart field, which is how the
+    ///     xAI API consumes lists.
     ///   - timeout: Request timeout in seconds (default 60).
     /// - Returns: The transcribed text.
     public static func transcribe(
@@ -21,6 +26,7 @@ public struct XAIClient: Sendable {
         apiKey: String,
         language: String? = nil,
         format: Bool = false,
+        keyterm: [String]? = nil,
         timeout: TimeInterval = 60,
         resourceTimeout: TimeInterval? = nil
     ) async throws -> String {
@@ -34,6 +40,14 @@ public struct XAIClient: Sendable {
             form.addField(name: "language", value: language)
             if format {
                 form.addField(name: "format", value: "true")
+            }
+        }
+
+        if let keyterm {
+            for term in keyterm {
+                let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                form.addField(name: "keyterm", value: trimmed)
             }
         }
 
